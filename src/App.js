@@ -1,191 +1,196 @@
-import 'regenerator-runtime/runtime'
-import React from 'react'
-import { login, logout } from './utils'
-import './global.css'
+import "regenerator-runtime/runtime";
+import React, { useState } from "react";
+import { login, logout } from "./utils";
+import "./global.css";
+import getConfig from "./config";
+// import { NFTStorage, File } from "nft.storage";
+import axios from "axios";
+import { nanoid } from "nanoid";
 
-import getConfig from './config'
-const { networkId } = getConfig(process.env.NODE_ENV || 'development')
+const { networkId } = getConfig(process.env.NODE_ENV || "development");
 
-export default function App() {
-  // use React Hooks to store greeting in component state
-  const [greeting, set_greeting] = React.useState()
+const nftStorageToken =
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJkaWQ6ZXRocjoweDlEMTQ1Q0EwZmYyODE3ZTJlMzBFN0JhRWU3OTNhYjIyODA3OWREQmUiLCJpc3MiOiJuZnQtc3RvcmFnZSIsImlhdCI6MTYzNzYyODU5NDE0OCwibmFtZSI6Im5lYXJ2ZW1iZXIifQ.sVapf7ZTEvvzb2YGM-Ber-4bspT9E--pfjtATcB3dBQ";
 
-  // when the user has not yet interacted with the form, disable the button
-  const [buttonDisabled, setButtonDisabled] = React.useState(true)
+const getImageBlob = async (imageInput) => {
+  return new Promise((res, rej) => {
+    try {
+      const fileReader = new FileReader();
+      fileReader.onloadend = () => res(fileReader.result);
+      fileReader.readAsArrayBuffer(imageInput.files[0]);
+    } catch (e) {
+      res(null);
+    }
+  });
+};
 
-  // after submitting the form, we want to show Notification
-  const [showNotification, setShowNotification] = React.useState(false)
+const Login = () => {
+  return (
+    <main>
+      <h1>Welcome to NEAR!</h1>
+      <p>
+        This is{" "}
+        <a
+          href="https://twitter.com/hashtag/NEARvember"
+          target="_blank"
+          style={{
+            backgroundColor: "white",
+            borderRadius: "5px",
+            padding: "1px 5px",
+          }}
+        >
+          #NEARvember
+        </a>{" "}
+        Challange 5.
+      </p>
+      <p>In this app you can create your own image-based NFT!</p>
+      <p>
+        To make use of the NEAR blockchain, you need to sign in. The button
+        below will sign you in using NEAR Wallet.
+      </p>
+      <p style={{ textAlign: "center", marginTop: "2.5em" }}>
+        <button onClick={login}>Sign in</button>
+      </p>
+    </main>
+  );
+};
 
-  // The useEffect hook can be used to fire side-effects during render
-  // Learn more: https://reactjs.org/docs/hooks-intro.html
-  React.useEffect(
-    () => {
-      // in this case, we only care to query the contract when signed in
-      if (window.walletConnection.isSignedIn()) {
+const App = () => {
+  const [error, setError] = useState(null);
+  const [notification, setNotification] = useState(false);
 
-        // window.contract is set by initContract in index.js
-        window.contract.get_greeting({ account_id: window.accountId })
-          .then(greetingFromContract => {
-            set_greeting(greetingFromContract)
-          })
-      }
-    },
+  const onSubmit = async (e) => {
+    e.preventDefault();
 
-    // The second argument to useEffect tells React when to re-run the effect
-    // Use an empty array to specify "only run on first render"
-    // This works because signing into NEAR Wallet reloads the page
-    []
-  )
+    const { titleInput, imageInput } = e.target.elements;
 
-  // if not signed in, return early with sign-in prompt
-  if (!window.walletConnection.isSignedIn()) {
-    return (
-      <main>
-        <h1>Welcome to NEAR!</h1>
-        <p>
-          To make use of the NEAR blockchain, you need to sign in. The button
-          below will sign you in using NEAR Wallet.
-        </p>
-        <p>
-          By default, when your app runs in "development" mode, it connects
-          to a test network ("testnet") wallet. This works just like the main
-          network ("mainnet") wallet, but the NEAR Tokens on testnet aren't
-          convertible to other currencies – they're just for testing!
-        </p>
-        <p>
-          Go ahead and click the button below to try it out:
-        </p>
-        <p style={{ textAlign: 'center', marginTop: '2.5em' }}>
-          <button onClick={login}>Sign in</button>
-        </p>
-      </main>
-    )
-  }
+    const title = titleInput.value.trim();
+    const image = await getImageBlob(imageInput);
+    if (!title || !image) {
+      setError("Title and Image should be provided!");
+      return;
+    } else {
+      setError(null);
+    }
+
+    const rep = await axios.post("https://api.nft.storage/upload", image, {
+      headers: { Authorization: `Bearer ${nftStorageToken}` },
+    });
+
+    if (rep.data.ok !== true) {
+      console.error(rep.data);
+      return;
+    }
+
+    const media = `https://${rep.data.value.cid}.ipfs.dweb.link/`;
+
+    window.contract
+      .nft_mint(
+        {
+          receiver_id: window.accountId,
+          token_id: nanoid(),
+          token_metadata: { title, media, copies: 1 },
+        },
+        "100000000000000",
+        "10000000000000000000000"
+      )
+      .then((res) => {
+        console.log(res);
+        setNotification(true);
+      });
+  };
+
+  if (!window.walletConnection.isSignedIn()) return <Login />;
 
   return (
-    // use React Fragment, <>, to avoid wrapping elements in unnecessary divs
-    <>
-      <button className="link" style={{ float: 'right' }} onClick={logout}>
-        Sign out
-      </button>
-      <main>
-        <h1>
-          <label
-            htmlFor="greeting"
-            style={{
-              color: 'var(--secondary)',
-              borderBottom: '2px solid var(--secondary)'
-            }}
-          >
-            {greeting}
-          </label>
-          {' '/* React trims whitespace around tags; insert literal space character when needed */}
-          {window.accountId}!
-        </h1>
-        <form onSubmit={async event => {
-          event.preventDefault()
-
-          // get elements from the form using their id attribute
-          const { fieldset, greeting } = event.target.elements
-
-          // hold onto new user-entered value from React's SynthenticEvent for use after `await` call
-          const newGreeting = greeting.value
-
-          // disable the form while the value gets updated on-chain
-          fieldset.disabled = true
-
-          try {
-            // make an update call to the smart contract
-            await window.contract.set_greeting({
-              // pass the value that the user entered in the greeting field
-              message: newGreeting
-            })
-          } catch (e) {
-            alert(
-              'Something went wrong! ' +
-              'Maybe you need to sign out and back in? ' +
-              'Check your browser console for more info.'
-            )
-            throw e
-          } finally {
-            // re-enable the form, whether the call succeeded or failed
-            fieldset.disabled = false
-          }
-
-          // update local `greeting` variable to match persisted value
-          set_greeting(newGreeting)
-
-          // show Notification
-          setShowNotification(true)
-
-          // remove Notification again after css animation completes
-          // this allows it to be shown again next time the form is submitted
-          setTimeout(() => {
-            setShowNotification(false)
-          }, 11000)
-        }}>
-          <fieldset id="fieldset">
-            <label
-              htmlFor="greeting"
+    <div>
+      {notification && <Notification />}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "end",
+        }}
+      >
+        Hi,&nbsp;
+        <span style={{ fontWeight: "bold" }}>{window.accountId}</span>!
+        <button className="link" onClick={logout}>
+          Sign out
+        </button>
+      </div>
+      <div style={{ display: "flex", justifyContent: "center" }}>
+        <form onSubmit={onSubmit}>
+          <h1>Create your NFT!</h1>
+          {error && (
+            <p
               style={{
-                display: 'block',
-                color: 'var(--gray)',
-                marginBottom: '0.5em'
+                backgroundColor: "rgba(255, 0, 0, 0.3)",
+                textAlign: "center",
+                padding: "10px",
+                borderRadius: "10px",
               }}
             >
-              Change greeting
-            </label>
-            <div style={{ display: 'flex' }}>
-              <input
-                autoComplete="off"
-                defaultValue={greeting}
-                id="greeting"
-                onChange={e => setButtonDisabled(e.target.value === greeting)}
-                style={{ flex: 1 }}
-              />
-              <button
-                disabled={buttonDisabled}
-                style={{ borderRadius: '0 5px 5px 0' }}
-              >
-                Save
-              </button>
-            </div>
-          </fieldset>
+              {error}
+            </p>
+          )}
+          <table>
+            <tbody>
+              <tr>
+                <td>
+                  <label htmlFor="titleInput" style={{ marginRight: "10px" }}>
+                    NFT Title:
+                  </label>
+                </td>
+                <td>
+                  <input type="text" id="titleInput" placeholder="" />
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <label htmlFor="imageInput" style={{ marginRight: "10px" }}>
+                    Select an image:
+                  </label>
+                </td>
+                <td>
+                  <input type="file" id="imageInput" />
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "center",
+              marginTop: "20px",
+            }}
+          >
+            <button type="submit">Mint NFT</button>
+          </div>
         </form>
-        <p>
-          Look at that! A Hello World app! This greeting is stored on the NEAR blockchain. Check it out:
-        </p>
-        <ol>
-          <li>
-            Look in <code>src/App.js</code> and <code>src/utils.js</code> – you'll see <code>get_greeting</code> and <code>set_greeting</code> being called on <code>contract</code>. What's this?
-          </li>
-          <li>
-            Ultimately, this <code>contract</code> code is defined in <code>assembly/main.ts</code> – this is the source code for your <a target="_blank" rel="noreferrer" href="https://docs.near.org/docs/develop/contracts/overview">smart contract</a>.</li>
-          <li>
-            When you run <code>yarn dev</code>, the code in <code>assembly/main.ts</code> gets deployed to the NEAR testnet. You can see how this happens by looking in <code>package.json</code> at the <code>scripts</code> section to find the <code>dev</code> command.</li>
-        </ol>
-        <hr />
-        <p>
-          To keep learning, check out <a target="_blank" rel="noreferrer" href="https://docs.near.org">the NEAR docs</a> or look through some <a target="_blank" rel="noreferrer" href="https://examples.near.org">example apps</a>.
-        </p>
-      </main>
-      {showNotification && <Notification />}
-    </>
-  )
-}
+      </div>
+    </div>
+  );
+};
 
-// this component gets rendered by App after the form is submitted
+export default App;
+
 function Notification() {
-  const urlPrefix = `https://explorer.${networkId}.near.org/accounts`
+  const urlPrefix = `https://explorer.${networkId}.near.org/accounts`;
   return (
     <aside>
-      <a target="_blank" rel="noreferrer" href={`${urlPrefix}/${window.accountId}`}>
+      <a
+        target="_blank"
+        rel="noreferrer"
+        href={`${urlPrefix}/${window.accountId}`}
+      >
         {window.accountId}
       </a>
-      {' '/* React trims whitespace around tags; insert literal space character when needed */}
-      called method: 'set_greeting' in contract:
-      {' '}
-      <a target="_blank" rel="noreferrer" href={`${urlPrefix}/${window.contract.contractId}`}>
+      &nbsp;minted NFT in contract:&nbsp;
+      <a
+        target="_blank"
+        rel="noreferrer"
+        href={`${urlPrefix}/${window.contract.contractId}`}
+      >
         {window.contract.contractId}
       </a>
       <footer>
@@ -193,5 +198,5 @@ function Notification() {
         <div>Just now</div>
       </footer>
     </aside>
-  )
+  );
 }
